@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Đảo Đèn Lồng — Ba Hòn Đảo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0E1430;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #F5F1E6;
+      user-select: none;
+    }
+    #canvas-container { position: fixed; inset: 0; }
+
+    /* Top HUD */
+    #hud-top {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-left { display: flex; gap: 10px; align-items: center; justify-content: flex-start; }
+    .hud-center { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .hud-right { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+
+    .pill {
+      background: rgba(14, 20, 48, 0.78);
+      border: 1px solid rgba(242, 193, 78, 0.45);
+      border-radius: 12px;
+      padding: 7px 14px;
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #C9B48A; }
+    .val { font-weight: 700; font-size: 18px; color: #F2C14E; }
+    #val-clock { font-size: 22px; font-variant-numeric: tabular-nums; color: #F5F1E6; }
+    #val-clock.danger {
+      color: #FF5A5F;
+      animation: blink 0.65s infinite alternate;
+    }
+    @keyframes blink { from { opacity: 1; } to { opacity: 0.35; } }
+    #wind-banner {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(143, 163, 184, 0.25);
+      border: 1px solid #8FA3B8;
+      color: #F5F1E6;
+      display: none;
+    }
+
+    /* Bottom-center 10-slot firefly bar */
+    #mote-bar-wrap {
+      position: fixed;
+      bottom: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #mote-slots {
+      display: flex;
+      gap: 6px;
+      background: rgba(14, 20, 48, 0.78);
+      border: 1px solid rgba(242, 193, 78, 0.4);
+      padding: 8px 12px;
+      border-radius: 14px;
+    }
+    .mote-slot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 229, 138, 0.45);
+      background: rgba(91, 95, 110, 0.28);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .mote-slot.filled {
+      background: radial-gradient(circle, #FFF6C2 20%, #FFE58A 70%, #FFB347 100%);
+      box-shadow: 0 0 10px #FFE58A;
+      border-color: #FFF6C2;
+      transform: scale(1.08);
+    }
+    #charm-badge {
+      display: none;
+      background: rgba(200, 16, 46, 0.85);
+      border: 1px solid #F2C14E;
+      color: #F5F1E6;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    /* Bottom-right ability cooldowns */
+    #abilities {
+      position: fixed;
+      bottom: 44px;
+      right: 18px;
+      display: flex;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .ability {
+      width: 84px;
+      background: rgba(14, 20, 48, 0.82);
+      border: 1.5px solid rgba(242, 193, 78, 0.45);
+      border-radius: 12px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .ability .key { font-size: 11px; color: #C9B48A; font-weight: 700; }
+    .ability .name { font-size: 12px; font-weight: 600; margin: 2px 0; }
+    .ability .cd { font-size: 13px; font-weight: 700; color: #7ef7b4; }
+    .ability .cd.dim { color: #8FA3B8; }
+
+    /* Context prompt */
+    #prompt {
+      position: fixed;
+      bottom: 104px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 179, 71, 0.22);
+      border: 1.5px solid #FFB347;
+      color: #FFE9B0;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      display: none;
+      z-index: 10;
+    }
+
+    /* Offscreen lantern arrow */
+    #lantern-arrow {
+      position: fixed;
+      width: 34px;
+      height: 34px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #FFB347;
+      text-shadow: 0 0 10px #FFB347;
+      pointer-events: none;
+      z-index: 12;
+      transform-origin: center;
+    }
+
+    /* Controls hint */
+    #controls-bar {
+      position: fixed;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(14, 20, 48, 0.72);
+      border: 1px solid rgba(245, 241, 230, 0.14);
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: 11.5px;
+      color: #C9B48A;
+      display: flex;
+      gap: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+    }
+    kbd {
+      background: rgba(242, 193, 78, 0.18);
+      border: 1px solid rgba(242, 193, 78, 0.45);
+      border-radius: 4px;
+      padding: 0 5px;
+      color: #FFE9B0;
+      font-weight: 700;
+    }
+
+    /* Modals */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(14, 20, 48, 0.8);
+      backdrop-filter: blur(7px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+    }
+    .overlay.hidden { display: none; }
+    .modal {
+      width: min(480px, 92vw);
+      background: linear-gradient(160deg, #1B2350 0%, #0E1430 100%);
+      border: 1.5px solid rgba(242, 193, 78, 0.55);
+      border-radius: 18px;
+      padding: 28px 26px;
+      text-align: center;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+    }
+    .modal h1 { font-size: 28px; color: #F2C14E; margin-bottom: 10px; }
+    .modal h2 { font-size: 16px; color: #FFB347; margin-bottom: 12px; font-weight: 600; }
+    .modal p { color: #F5F1E6; font-size: 14.5px; line-height: 1.6; margin-bottom: 16px; }
+    .quote {
+      font-style: italic;
+      background: rgba(14, 20, 48, 0.55);
+      border-left: 3px solid #F2C14E;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 18px;
+      text-align: left;
+      color: #FFE9B0;
+    }
+    .stats-box {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      text-align: left;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .btn-row { display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      background: linear-gradient(135deg, #FFB347, #F2C14E);
+      color: #0E1430;
+      font-weight: 700;
+      font-size: 15px;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 22px;
+      cursor: pointer;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn.secondary {
+      background: rgba(245, 241, 230, 0.12);
+      color: #F5F1E6;
+      border: 1px solid rgba(242, 193, 78, 0.35);
+    }
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    .setting-row input { width: 55%; accent-color: #F2C14E; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- Top HUD -->
+  <div id="hud-top">
+    <div class="hud-left">
+      <div class="pill">
+        <span class="lbl">Ngọn Lửa</span>
+        <span class="val" id="val-flames">🔥🔥🔥</span>
+      </div>
+      <div class="pill">
+        <span class="lbl" id="val-night-lbl">Đêm 1 · Đảo Bến</span>
+      </div>
+    </div>
+    <div class="hud-center">
+      <div class="pill"><span id="val-clock">05:00</span></div>
+      <div id="wind-banner">🍃 Gió mạnh sắp nổi!</div>
+    </div>
+    <div class="hud-right">
+      <div class="pill">
+        <span class="lbl">Đèn</span>
+        <span class="val" id="val-lanterns">0 / 5</span>
+      </div>
+      <div class="pill">
+        <span class="lbl">Điểm</span>
+        <span class="val" id="val-score">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Offscreen nearest unlit lantern arrow -->
+  <div id="lantern-arrow">➤</div>
+
+  <!-- Interact prompt -->
+  <div id="prompt">E — Nạp ánh sáng (0/10)</div>
+
+  <!-- Bottom-center 10-slot firefly bar -->
+  <div id="mote-bar-wrap">
+    <div id="charm-badge">🧧 Bùa Gió: 10.0s</div>
+    <div id="mote-slots"></div>
+  </div>
+
+  <!-- Bottom-right abilities -->
+  <div id="abilities">
+    <div class="ability">
+      <div class="key">SHIFT</div>
+      <div class="name">Lướt</div>
+      <div class="cd" id="cd-dash">Sẵn sàng</div>
+    </div>
+    <div class="ability">
+      <div class="key">F / X</div>
+      <div class="name">Tỏa Sáng</div>
+      <div class="cd dim" id="cd-pulse">Cần 3</div>
+    </div>
+  </div>
+
+  <div id="controls-bar">
+    <span><kbd>WASD</kbd> Di chuyển</span>
+    <span><kbd>Space</kbd> Nhảy</span>
+    <span><kbd>Shift</kbd> Lướt</span>
+    <span><kbd>E</kbd> Nạp đèn</span>
+    <span><kbd>F</kbd>/<kbd>X</kbd> Tỏa Sáng</span>
+    <span><kbd>Q</kbd>/<kbd>C</kbd> hoặc kéo chuột: Camera</span>
+    <span><kbd>Esc</kbd>/<kbd>P</kbd> Tạm dừng</span>
+  </div>
+
+  <!-- Main / Intro / Result / Pause / Settings Modal -->
+  <div class="overlay" id="modal-overlay">
+    <div class="modal" id="modal-content"></div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
