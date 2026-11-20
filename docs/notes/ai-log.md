@@ -1,17 +1,21 @@
 # Nhật ký dùng AI & Quản lý Token (AI Log)
 
 ## Phase 1 (PRD-0 & Test Contract v1.0)
-- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~18,000 – 24,000 tokens.
+- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~21,000 tokens.
 - **Cách tiết kiệm:** Python 3 stdlib (0 dependency), đọc kỹ Contract trước khi code, batch tạo file song song.
 - **Harness thiết lập:** `AGENTS.md`, `.github/workflows/ci.yml`.
 
 ## Phase 2 (TICKET-02 "Ba hòn đảo" & Test Contract v1.1)
-- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~22,000 – 28,000 tokens (+ ~14,000 tokens cho đợt nâng cấp đồ họa, thiết kế nhân vật Mây & minimap radar).
-- **Lỗi phát hiện & xử lý:** Chỉnh điểm xuất phát Đêm 3 tránh Tháp Chuông `(0,0,32)`; cập nhật test hồi quy Phase 1 minh bạch theo số liệu chuẩn.
-- **Tiến hóa Harness:** Cập nhật `AGENTS.md` (12 bước tick, 5 trạng thái Bóng Mực) + thêm skill `.agents/skills/verify-phase/SKILL.md`.
+- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~39,000 tokens (gồm cả đợt nâng cấp thiết kế nhân vật Mây, đồ họa 3D & minimap).
+- **Lỗi phát hiện & xử lý:** Dời điểm xuất phát Đêm 3 sang `(0,0,32)` tránh Tháp Chuông; cập nhật test hồi quy Phase 1 minh bạch.
+- **Tiến hóa Harness:** Cập nhật `AGENTS.md` + thêm skill `.agents/skills/verify-phase/SKILL.md`.
 
 ## Phase 3 (TICKET-03 "Đèn cạn dầu" & Test Contract v1.2)
-- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~20,000 – 26,000 tokens.
-- **Cách tiết kiệm:** Thiết kế trước mô hình fixed-point nguyên `fuel_60` (1/60) ngay từ đầu nên không phải debug sai số số thực quanh biên `fuel == 30` hay `ceil((100 - fuel)/10)`.
-- **Quyết định & Kiểm chứng thay đổi yêu cầu:** Viết [ADR-001](adr-001-lantern-fuel-and-dawn-survival.md), [CHANGELOG.md](../../CHANGELOG.md), thay thế công khai các test cũ bị Ticket-03 ghi đè và giữ nguyên mọi test hồi quy Phase 1–2 còn hiệu lực.
-- **Tiến hóa Harness:** Cập nhật [AGENTS.md](../../AGENTS.md) với quy tắc `fuel_60` nguyên, 6 trạng thái Bóng Mực (`+drain`), thứ tự tick có bước trừ dầu/tắt đèn và luật thắng `dawn_survived`.
+- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~23,000 tokens.
+- **Quyết định thiết kế:** Fixed-point nguyên `fuel_60` (`1/60`), ADR-001, `CHANGELOG.md`, cập nhật công khai test bị thay thế.
+- **Tiến hóa Harness:** Cập nhật `AGENTS.md` với luật nhiên liệu nguyên, trạng thái `drain` và `dawn_survived`.
+
+## Phase 4 (TICKET-04 "Bình minh: phát hành v1.0.0" & Test Contract v1.3)
+- **Công cụ AI:** Google Antigravity · **Ước tính token:** ~26,000 tokens.
+- **Tối ưu & Kiểm chứng:** Dùng `THREE.InstancedMesh` cho 200 Bóng Mực & 100 đom đóm trong cảnh benchmark chuẩn (cắt từ >1.200 xuống 2 draw calls); chạy soak test 10 Đêm thật kiểm tra RSS đầu/cuối; kiểm thử tự động bảng xếp hạng & export CLI.
+- **Tổng ước tính 4 Phase:** ~109,000 tokens (~$0.40 – $0.80). Chi tiết đánh giá xem [retro.md](retro.md).

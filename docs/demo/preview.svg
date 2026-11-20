@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0E1430"/>
+      <stop offset="70%" stop-color="#1B2350"/>
+      <stop offset="100%" stop-color="#12384A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFF6C2" stop-opacity="0.95"/>
+      <stop offset="45%" stop-color="#FFB347" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFB347" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="shadeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7A3CFF" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#7A3CFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky)"/>
+  <!-- Moon & stars -->
+  <circle cx="800" cy="95" r="38" fill="#FFE9B0"/>
+  <circle cx="800" cy="95" r="95" fill="url(#glow)" opacity="0.5"/>
+  <g fill="#FFF6C2" opacity="0.85">
+    <circle cx="120" cy="70" r="2"/><circle cx="240" cy="45" r="1.5"/><circle cx="410" cy="85" r="2"/>
+    <circle cx="580" cy="52" r="2.2"/><circle cx="670" cy="120" r="1.5"/><circle cx="885" cy="160" r="2"/>
+  </g>
+  <!-- Cloud sea & Island -->
+  <ellipse cx="480" cy="480" rx="540" ry="90" fill="#12384A" opacity="0.9"/>
+  <ellipse cx="480" cy="410" rx="340" ry="82" fill="#C9B48A"/>
+  <ellipse cx="480" cy="402" rx="318" ry="72" fill="#2F5D50"/>
+  <!-- Lit Grand Lantern -->
+  <circle cx="265" cy="300" r="95" fill="url(#glow)"/>
+  <rect x="257" y="310" width="16" height="82" fill="#6B4A2F"/>
+  <rect x="247" y="275" width="36" height="42" rx="4" fill="#FFE9B0" stroke="#FFB347" stroke-width="3"/>
+  <polygon points="236,277 265,250 294,277" fill="#6B4A2F"/>
+  <rect x="233" y="232" width="64" height="8" rx="3" fill="#0E1430" stroke="#F2C14E"/>
+  <rect x="235" y="234" width="52" height="4" rx="2" fill="#FFB347"/>
+  <!-- Unlit torn lantern -->
+  <rect x="687" y="318" width="16" height="74" fill="#6B4A2F"/>
+  <rect x="677" y="292" width="36" height="32" rx="3" fill="#5B5F6E"/>
+  <polygon points="668,294 695,270 722,294" fill="#6B4A2F"/>
+  <!-- Ink Shade -->
+  <circle cx="615" cy="358" r="55" fill="url(#shadeGlow)"/>
+  <polygon points="592,395 615,315 638,395" fill="#120A1A" stroke="#7A3CFF" stroke-width="2.5"/>
+  <circle cx="608" cy="348" r="3.5" fill="#7A3CFF"/><circle cx="622" cy="348" r="3.5" fill="#7A3CFF"/>
+  <!-- Mây with nón lá + mini lantern -->
+  <polygon points="452,402 475,332 498,402" fill="#E8E2D0" stroke="#F2C14E" stroke-width="2"/>
+  <ellipse cx="475" cy="336" rx="16" ry="5" fill="#C8102E"/>
+  <circle cx="475" cy="320" r="12" fill="#FFDFC4"/>
+  <polygon points="438,318 475,292 512,318" fill="#C9B48A" stroke="#6B4A2F" stroke-width="2"/>
+  <circle cx="508" cy="332" r="7" fill="#FFE9B0"/>
+  <circle cx="508" cy="332" r="24" fill="url(#glow)"/>
+  <!-- Fireflies -->
+  <circle cx="380" cy="345" r="5" fill="#FFF6C2"/><circle cx="540" cy="310" r="4" fill="#FFE58A"/>
+  <!-- Title Overlay -->
+  <rect x="28" y="22" width="390" height="62" rx="14" fill="#0E1430" fill-opacity="0.82" stroke="#F2C14E" stroke-width="1.5"/>
+  <text x="48" y="52" fill="#F2C14E" font-family="Segoe UI, sans-serif" font-size="22" font-weight="800">ĐẢO ĐÈN LỒNG — v1.0.0</text>
+  <text x="48" y="74" fill="#F5F1E6" font-family="Segoe UI, sans-serif" font-size="13">Contract v1.3 · 3 Đêm · Headless · Benchmark · Soak</text>
+</svg>

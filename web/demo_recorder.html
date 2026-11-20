@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Đảo Đèn Lồng — Automated Demo Recorder</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: #0E1430;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    #rec {
+      display: block;
+      width: 1280px;
+      height: 720px;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="rec" width="1280" height="720"></canvas>
+  <script type="module">
+    import * as THREE from "three";
+
+    const W = 1280;
+    const H = 720;
+    const TOTAL_DURATION_S = 68.0;
+
+    const COLORS = {
+      sky: 0x0E1430,
+      fog: 0x1B2350,
+      grass: 0x2F5D50,
+      sand: 0xC9B48A,
+      wood: 0x6B4A2F,
+      cloudSea: 0x12384A,
+      lanternLit: 0xFFB347,
+      lanternCore: 0xFFE9B0,
+      lanternUnlit: 0x5B5F6E,
+      moteCore: 0xFFF6C2,
+      moteHalo: 0xFFE58A,
+      shadeBody: 0x120A1A,
+      shadeRim: 0x7A3CFF,
+      shadeRimCB: 0x00B3FF,
+      shadeStunned: 0x3A3450,
+      mayCloak: 0xE8E2D0,
+      mayScarf: 0xC8102E,
+      gold: 0xF2C14E,
+      drifter: 0x8FA3B8,
+    };
+
+    const recCanvas = document.getElementById("rec");
+    const ctx = recCanvas.getContext("2d");
+
+    async function reportError(msg) {
+      try {
+        await fetch("/api/demo-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: String(msg) }),
+        });
+      } catch (_) {}
+    }
+
+    function selectMimeType() {
+      const candidates = [
+        "video/mp4;codecs=avc1.42E01E",
+        "video/mp4;codecs=avc1.4D401F",
+        "video/mp4;codecs=avc1",
+        "video/mp4",
+      ];
+      for (const m of candidates) {
+        if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) {
+          return m;
+        }
+      }
+      return null;
+    }
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return function () {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function ringPts(cx, cz, r, angles, y = 0) {
+      return angles.map((deg) => {
+        const rad = (deg * Math.PI) / 180;
+        return [cx + Math.cos(rad) * r, y, cz + Math.sin(rad) * r];
+      });
+    }
+
+    function createGlowTexture(innerHex, outerRgba) {
+      const c = document.createElement("canvas");
+      c.width = 64;
+      c.height = 64;
+      const gctx = c.getContext("2d");
+      const g = gctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, innerHex);
+      g.addColorStop(0.42, outerRgba);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      gctx.fillStyle = g;
+      gctx.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(c);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    // Offscreen WebGL Renderer (1280x720)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(COLORS.sky);
+    scene.fog = new THREE.FogExp2(COLORS.fog, 0.01);
+
+    const camera = new THREE.PerspectiveCamera(58, W / H, 0.1, 280);
+    const goldTex = createGlowTexture("#FFF6C2", "rgba(255,179,71,0.55)");
+
+    const ambient = new THREE.AmbientLight(0xd8e4ff, 0.35);
+    scene.add(ambient);
+    const hemi = new THREE.HemisphereLight(0x4b5f9e, COLORS.cloudSea, 0.35);
+    scene.add(hemi);
+    const moon = new THREE.DirectionalLight(0xc8daff, 0.85);
+    moon.position.set(28, 52, 24);
+    moon.castShadow = true;
+    scene.add(moon);
+
+    // Stars & Cloud sea base
+    const starPos = [];
+    for (let i = 0; i < 320; i++) {
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.random() * Math.PI * 0.45;
+      starPos.push(160 * Math.sin(ph) * Math.cos(th), 160 * Math.cos(ph) + 8, 160 * Math.sin(ph) * Math.sin(th));
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos, 3));
+    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: COLORS.moteCore, size: 1.2 })));
+
+    const moonOrb = new THREE.Mesh(new THREE.SphereGeometry(6.5, 20, 20), new THREE.MeshBasicMaterial({ color: COLORS.lanternCore }));
+    moonOrb.position.set(62, 85, -88);
+    scene.add(moonOrb);
+
+    const cloudPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(520, 520),
+      new THREE.MeshStandardMaterial({ color: COLORS.cloudSea, roughness: 0.95 })
+    );
+    cloudPlane.rotation.x = -Math.PI / 2;
+    cloudPlane.position.y = -11.5;
+    scene.add(cloudPlane);
+
+    const worldGroup = new THREE.Group();
+    const entityGroup = new THREE.Group();
+    const fxGroup = new THREE.Group();
+    scene.add(worldGroup, entityGroup, fxGroup);
+
+    // Mây character mesh
+    function buildMayMesh() {
+      const root = new THREE.Group();
+      const rig = new THREE.Group();
+      root.add(rig);
+
+      const bootMat = new THREE.MeshStandardMaterial({ color: COLORS.wood, roughness: 0.85 });
+      const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.24, 6, 8), bootMat);
+      legL.position.set(-0.14, 0.2, 0);
+      const legR = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.24, 6, 8), bootMat);
+      legR.position.set(0.14, 0.2, 0);
+      rig.add(legL, legR);
+
+      const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.48, 0.96, 18), new THREE.MeshStandardMaterial({ color: COLORS.mayCloak }));
+      cloak.position.y = 0.72;
+      cloak.castShadow = true;
+      rig.add(cloak);
+
+      const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.085, 10, 20), new THREE.MeshStandardMaterial({ color: COLORS.mayScarf }));
+      scarf.rotation.x = Math.PI / 2;
+      scarf.position.y = 1.18;
+      rig.add(scarf);
+
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.56), new THREE.MeshStandardMaterial({ color: COLORS.mayScarf }));
+      rib.position.set(0, 1.1, -0.42);
+      rib.rotation.x = -0.25;
+      rig.add(rib);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 14), new THREE.MeshStandardMaterial({ color: 0xffdfc4 }));
+      head.position.y = 1.42;
+      rig.add(head);
+
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.74, 0.42, 24), new THREE.MeshStandardMaterial({ color: COLORS.sand }));
+      hat.position.y = 1.66;
+      hat.castShadow = true;
+      rig.add(hat);
+
+      const miniLantern = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.12, 1),
+        new THREE.MeshStandardMaterial({ color: COLORS.lanternCore, emissive: COLORS.lanternLit, emissiveIntensity: 2.3 })
+      );
+      miniLantern.position.set(0, 1.24, 0.64);
+      rig.add(miniLantern);
+
+      const pLight = new THREE.PointLight(COLORS.lanternLit, 2.5, 14, 1.5);
+      pLight.position.set(0, 1.3, 0.64);
+      rig.add(pLight);
+
+      const sparks = [];
+      const spMat = new THREE.SpriteMaterial({ map: goldTex, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+      for (let i = 0; i < 12; i++) {
+        const sp = new THREE.Sprite(spMat);
+        sp.scale.set(0.35, 0.35, 1);
+        sp.visible = false;
+        root.add(sp);
+        sparks.push(sp);
+      }
+      return { root, legL, legR, rib, sparks };
+    }
+
+    const may = buildMayMesh();
+    scene.add(may.root);
+
+    function createLantern(pos, lit = false, fuelPct = 1.0) {
+      const g = new THREE.Group();
+      g.position.set(pos[0], pos[1], pos[2]);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.0, 0.55, 8), new THREE.MeshStandardMaterial({ color: COLORS.lanternUnlit }));
+      base.position.y = 0.27;
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 2.4, 8), new THREE.MeshStandardMaterial({ color: COLORS.wood }));
+      pillar.position.y = 1.65;
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: lit ? COLORS.lanternCore : COLORS.lanternUnlit,
+        emissive: COLORS.lanternLit,
+        emissiveIntensity: lit ? 2.4 : 0.08,
+      });
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.54, 0.46, 1.15, 6), coreMat);
+      core.position.y = 3.25;
+      core.scale.y = lit ? 1.0 : 0.8;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.65, 6), new THREE.MeshStandardMaterial({ color: COLORS.wood }));
+      roof.position.y = 4.15;
+      const pLight = new THREE.PointLight(COLORS.lanternLit, lit ? 3.8 : 0, 24, 1.4);
+      pLight.position.y = 3.25;
+      const safeRing = new THREE.Mesh(
+        new THREE.RingGeometry(5.82, 6.02, 48),
+        new THREE.MeshBasicMaterial({ color: COLORS.lanternLit, transparent: true, opacity: lit ? 0.38 : 0, side: THREE.DoubleSide })
+      );
+      safeRing.rotation.x = -Math.PI / 2;
+      safeRing.position.y = 0.06;
+
+      const fbGroup = new THREE.Group();
+      fbGroup.position.y = 5.1;
+      fbGroup.visible = lit;
+      const fbBg = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.28), new THREE.MeshBasicMaterial({ color: 0x0E1430, side: THREE.DoubleSide }));
+      const fbFillMat = new THREE.MeshBasicMaterial({ color: COLORS.lanternLit, side: THREE.DoubleSide });
+      const fbFill = new THREE.Mesh(new THREE.PlaneGeometry(1.96, 0.16), fbFillMat);
+      fbFill.position.z = 0.02;
+      fbFill.scale.x = fuelPct;
+      fbFill.position.x = -0.98 * (1 - fuelPct);
+      fbGroup.add(fbBg, fbFill);
+
+      g.add(base, pillar, core, roof, pLight, safeRing, fbGroup);
+      entityGroup.add(g);
+      return { g, core, coreMat, pLight, safeRing, fbGroup, fbFill, fbFillMat, pos };
+    }
+
+    function createShade(pos) {
+      const g = new THREE.Group();
+      g.position.set(pos[0], pos[1], pos[2]);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: COLORS.shadeBody, emissive: COLORS.shadeRim, emissiveIntensity: 0.7 });
+      const body = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.75, 14), bodyMat);
+      body.position.y = 0.92;
+      const ringMat = new THREE.MeshBasicMaterial({ color: COLORS.shadeRim, transparent: true, opacity: 0.8 });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 8, 24), ringMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.65;
+      const eyeMat = new THREE.MeshBasicMaterial({ color: COLORS.shadeRim });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeMat);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeMat);
+      eyeL.position.set(-0.18, 1.28, 0.34);
+      eyeR.position.set(0.18, 1.28, 0.34);
+      const stars = new THREE.Group();
+      stars.position.y = 2.05;
+      stars.visible = false;
+      for (let i = 0; i < 3; i++) {
+        const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), new THREE.MeshBasicMaterial({ color: COLORS.gold }));
+        const a = (i / 3) * Math.PI * 2;
+        st.position.set(Math.cos(a) * 0.42, 0, Math.sin(a) * 0.42);
+        stars.add(st);
+      }
+      g.add(body, ring, eyeL, eyeR, stars);
+      entityGroup.add(g);
+      return { g, bodyMat, ringMat, eyeMat, stars };
+    }
+
+    function addIslandDisc(cx, cz, radius) {
+      const turf = new THREE.Mesh(new THREE.CylinderGeometry(radius - 1.5, radius - 1.5, 0.3, 48), new THREE.MeshStandardMaterial({ color: COLORS.grass }));
+      turf.position.set(cx, -0.15, cz);
+      turf.receiveShadow = true;
+      const beach = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius - 0.8, 0.8, 48), new THREE.MeshStandardMaterial({ color: COLORS.sand }));
+      beach.position.set(cx, -0.44, cz);
+      const cliff = new THREE.Mesh(new THREE.CylinderGeometry(radius - 0.8, radius * 0.62, 6.2, 24), new THREE.MeshStandardMaterial({ color: 0x3b4252 }));
+      cliff.position.set(cx, -3.9, cz);
+      worldGroup.add(turf, beach, cliff);
+    }
+
+    let currentSceneTag = "";
+    let sceneObjects = {};
+
+    function setupNight1Scene(isBench = false) {
+      worldGroup.clear();
+      entityGroup.clear();
+      fxGroup.clear();
+      addIslandDisc(0, 0, 40);
+      may.root.visible = true;
+
+      const lPos = [[0, 0, 25], [23.8, 0, 7.7], [14.7, 0, -20.2], [-14.7, 0, -20.2], [-23.8, 0, 7.7]];
+      const lanterns = lPos.map((p, idx) => createLantern(p, isBench ? idx < 3 : idx === 1, 0.85));
+
+      if (isBench) {
+        ambient.intensity = 0.15 + 0.55 * (3 / 5);
+        may.root.position.set(0, 0, 0);
+        const rng = mulberry32(42);
+        const shadeInst = new THREE.InstancedMesh(
+          new THREE.ConeGeometry(0.62, 1.75, 10),
+          new THREE.MeshStandardMaterial({ color: COLORS.shadeBody, emissive: COLORS.shadeRim, emissiveIntensity: 0.65 }),
+          200
+        );
+        entityGroup.add(shadeInst);
+        const shades = [];
+        for (let i = 0; i < 200; i++) {
+          const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 37.5;
+          shades.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, ang: rng() * Math.PI * 2 });
+        }
+        const moteInst = new THREE.InstancedMesh(
+          new THREE.SphereGeometry(0.22, 8, 8),
+          new THREE.MeshStandardMaterial({ color: COLORS.moteCore, emissive: COLORS.moteHalo, emissiveIntensity: 2.4 }),
+          100
+        );
+        entityGroup.add(moteInst);
+        const motes = [];
+        for (let i = 0; i < 100; i++) {
+          const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 37.0;
+          motes.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, phase: rng() * Math.PI * 2 });
+        }
+        sceneObjects = { lanterns, shadeInst, shades, moteInst, motes, dummy: new THREE.Object3D() };
+      } else {
+        ambient.intensity = 0.28;
+        const moteGeo = new THREE.SphereGeometry(0.22, 10, 10);
+        const moteMat = new THREE.MeshStandardMaterial({ color: COLORS.moteCore, emissive: COLORS.moteHalo, emissiveIntensity: 2.4 });
+        const motes = [[0, 0.9, 6], [0, 0.9, 11], [0, 0.9, 16]].map((p) => {
+          const m = new THREE.Mesh(moteGeo, moteMat);
+          m.position.set(p[0], p[1], p[2]);
+          entityGroup.add(m);
+          return m;
+        });
+        const shade = createShade([6, 0, 19]);
+        const pulseRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.5, 0.95, 48),
+          new THREE.MeshBasicMaterial({ color: COLORS.moteHalo, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+        );
+        pulseRing.rotation.x = -Math.PI / 2;
+        pulseRing.visible = false;
+        fxGroup.add(pulseRing);
+        sceneObjects = { lanterns, motes, shade, pulseRing };
+      }
+    }
+
+    function setupNight2Scene() {
+      worldGroup.clear();
+      entityGroup.clear();
+      fxGroup.clear();
+      addIslandDisc(0, 0, 28);
+      addIslandDisc(70, 0, 28);
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(18, 0.35, 4), new THREE.MeshStandardMaterial({ color: COLORS.wood }));
+      bridge.position.set(35, -0.18, 0);
+      worldGroup.add(bridge);
+      // Jump pad
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.1, 1.1, 0.25, 24),
+        new THREE.MeshStandardMaterial({ color: COLORS.gold, emissive: COLORS.lanternLit, emissiveIntensity: 1.0 })
+      );
+      pad.position.set(20, 0.13, 18);
+      worldGroup.add(pad);
+      // Wind Charm C1 on bridge
+      const charm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.85, 0.12),
+        new THREE.MeshStandardMaterial({ color: COLORS.mayScarf, emissive: COLORS.gold, emissiveIntensity: 0.7 })
+      );
+      charm.position.set(35, 1.1, 0);
+      entityGroup.add(charm);
+      // Drifter
+      const drifter = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.65, 0),
+        new THREE.MeshStandardMaterial({ color: COLORS.drifter, emissive: 0x526b82, emissiveIntensity: 0.7 })
+      );
+      drifter.position.set(42, 2.2, 6);
+      entityGroup.add(drifter);
+      const l1 = createLantern([0, 0, 20], true, 0.9);
+      const l4 = createLantern([70, 0, 20], true, 0.75);
+      ambient.intensity = 0.4;
+      sceneObjects = { charm, drifter, l1, l4 };
+    }
+
+    function setupNight3Scene() {
+      worldGroup.clear();
+      entityGroup.clear();
+      fxGroup.clear();
+      addIslandDisc(0, 0, 45);
+      const t1 = new THREE.Mesh(new THREE.CylinderGeometry(24, 24, 3, 40, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: COLORS.sand }));
+      t1.position.y = 1.5;
+      t1.rotation.y = -Math.PI / 2;
+      const t2 = new THREE.Mesh(new THREE.CylinderGeometry(8, 8.3, 6, 32), new THREE.MeshStandardMaterial({ color: COLORS.grass }));
+      t2.position.y = 3;
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 8, 16), new THREE.MeshStandardMaterial({ color: COLORS.wood }));
+      tower.position.y = 10;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2.2, 8), new THREE.MeshStandardMaterial({ color: COLORS.mayScarf }));
+      roof.position.y = 14.8;
+      worldGroup.add(t1, t2, tower, roof);
+
+      const l1 = createLantern([0, 6, 6], true, 0.8);
+      const l2 = createLantern([18, 3, 10], true, 0.22); // low fuel < 30%
+      l2.safeRing.material.opacity = 0;
+      const shade = createShade([17.2, 3, 8.8]);
+      const beamMat = new THREE.LineBasicMaterial({ color: COLORS.shadeRim });
+      const beamGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(17.2, 4.2, 8.8),
+        new THREE.Vector3(18, 6.25, 10),
+      ]);
+      const beam = new THREE.Line(beamGeo, beamMat);
+      fxGroup.add(beam);
+      ambient.intensity = 0.45;
+      sceneObjects = { l1, l2, shade, beamMat };
+    }
+
+    // Canvas drawing helpers
+    function drawRoundRect(x, y, w, h, r, fill, stroke) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+    }
+
+    function drawGameHUD({ nightLabel, flames = 3, clock = "03:48", lanterns = "1/5 (≥3)", score = 185, carried = 4, cap = 12, subtitle = "", cb = false, prompt = "" }) {
+      // Top-left pills
+      drawRoundRect(16, 16, 220, 48, 14, "rgba(14,20,48,0.86)", "rgba(242,193,78,0.55)");
+      ctx.font = "700 18px Segoe UI, sans-serif";
+      ctx.fillStyle = "#C9B48A";
+      ctx.fillText("Lửa", 30, 46);
+      ctx.fillStyle = "#FFB347";
+      ctx.fillText("🔥".repeat(flames), 78, 46);
+
+      drawRoundRect(246, 16, 210, 48, 14, "rgba(14,20,48,0.86)", "rgba(242,193,78,0.55)");
+      ctx.fillStyle = "#F5F1E6";
+      ctx.fillText(nightLabel, 260, 46);
+
+      // Center Clock
+      drawRoundRect(570, 16, 140, 48, 14, "rgba(14,20,48,0.88)", "rgba(242,193,78,0.7)");
+      ctx.font = "800 24px Segoe UI, sans-serif";
+      ctx.fillStyle = "#F5F1E6";
+      ctx.textAlign = "center";
+      ctx.fillText(clock, 640, 48);
+      ctx.textAlign = "left";
+
+      // Top-right pills
+      drawRoundRect(920, 16, 180, 48, 14, "rgba(14,20,48,0.86)", "rgba(242,193,78,0.55)");
+      ctx.font = "700 18px Segoe UI, sans-serif";
+      ctx.fillStyle = "#C9B48A";
+      ctx.fillText("Đèn", 934, 46);
+      ctx.fillStyle = "#F2C14E";
+      ctx.fillText(lanterns, 982, 46);
+
+      drawRoundRect(1110, 16, 154, 48, 14, "rgba(14,20,48,0.86)", "rgba(242,193,78,0.55)");
+      ctx.fillStyle = "#C9B48A";
+      ctx.fillText("Điểm", 1124, 46);
+      ctx.fillStyle = "#F2C14E";
+      ctx.fillText(String(score), 1184, 46);
+
+      // Subtitle toast
+      if (subtitle) {
+        const border = cb ? "#FFFFFF" : "#FF5A5F";
+        drawRoundRect(410, 74, 460, 38, 19, "rgba(14,20,48,0.9)", border);
+        ctx.font = "700 18px Segoe UI, sans-serif";
+        ctx.fillStyle = cb ? "#FFFFFF" : "#F5F1E6";
+        ctx.textAlign = "center";
+        ctx.fillText(subtitle, 640, 99);
+        ctx.textAlign = "left";
+      }
+
+      if (prompt) {
+        drawRoundRect(450, 588, 380, 38, 19, "rgba(255,179,71,0.26)", "#FFB347");
+        ctx.font = "700 18px Segoe UI, sans-serif";
+        ctx.fillStyle = "#FFE9B0";
+        ctx.textAlign = "center";
+        ctx.fillText(prompt, 640, 613);
+        ctx.textAlign = "left";
+      }
+
+      // Bottom-center Firefly bar
+      const barW = cap * 18 + 80;
+      const barX = (W - barW) / 2;
+      drawRoundRect(barX, 648, barW, 42, 21, "rgba(14,20,48,0.9)", "rgba(242,193,78,0.55)");
+      for (let i = 0; i < cap; i++) {
+        ctx.beginPath();
+        ctx.arc(barX + 20 + i * 18, 669, 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = i < carried ? "#FFE58A" : "rgba(91,95,110,0.4)";
+        ctx.fill();
+        ctx.strokeStyle = i < carried ? "#FFF6C2" : "rgba(255,229,138,0.35)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.font = "800 18px Segoe UI, sans-serif";
+      ctx.fillStyle = "#FFE58A";
+      ctx.fillText(`${carried}/${cap}`, barX + cap * 18 + 22, 675);
+    }
+
+    function drawTerminalLines(title, lines, scrollOffset = 0, accent = "#F2C14E") {
+      ctx.fillStyle = "#0E1430";
+      ctx.fillRect(0, 0, W, H);
+      drawRoundRect(36, 28, W - 72, H - 56, 18, "#0A0F24", accent);
+      drawRoundRect(36, 28, W - 72, 54, 18, "#1B2350", accent);
+      ctx.font = "800 22px Segoe UI, sans-serif";
+      ctx.fillStyle = accent;
+      ctx.fillText(title, 60, 63);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(52, 92, W - 104, H - 134);
+      ctx.clip();
+      ctx.font = "600 18px Consolas, 'Courier New', monospace";
+      const lineH = 26;
+      const startY = 122 - scrollOffset;
+      lines.forEach((ln, idx) => {
+        const y = startY + idx * lineH;
+        if (y < 70 || y > H - 20) return;
+        if (ln.startsWith("$") || ln.startsWith("===")) ctx.fillStyle = "#F2C14E";
+        else if (ln.includes("... ok") || ln.trim() === "OK" || ln.includes('"crashes": 0')) ctx.fillStyle = "#7EF7B4";
+        else ctx.fillStyle = "#F5F1E6";
+        ctx.fillText(ln.slice(0, 108), 60, y);
+      });
+      ctx.restore();
+    }
+
+    async function main() {
+      const mimeType = selectMimeType();
+      if (!mimeType) {
+        await reportError("MediaRecorder does not support any video/mp4 codec in this browser.");
+        return;
+      }
+
+      let demoData;
+      try {
+        const res = await fetch("/api/demo-data");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        demoData = await res.json();
+      } catch (err) {
+        await reportError(`Failed to load /api/demo-data: ${err}`);
+        return;
+      }
+
+      const stream = recCanvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 3_500_000 });
+      const chunks = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const stoppedPromise = new Promise((resolve) => {
+        recorder.onstop = resolve;
+      });
+
+      recorder.start(500);
+      const startMs = performance.now();
+
+      function renderFrame() {
+        const t = (performance.now() - startMs) / 1000.0;
+
+        // Scene routing
+        if (t < 5.0) {
+          if (currentSceneTag !== "s1") { currentSceneTag = "s1"; setupNight1Scene(false); }
+          const ang = t * 0.45;
+          may.root.position.set(0, 0, 0);
+          may.root.rotation.y = 0;
+          camera.position.set(Math.sin(ang) * 14, 7.5, Math.cos(ang) * 14);
+          camera.lookAt(0, 1.5, 0);
+          renderer.render(scene, camera);
+          ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+          drawRoundRect(190, 235, 900, 220, 24, "rgba(14,20,48,0.86)", "#F2C14E");
+          ctx.textAlign = "center";
+          ctx.font = "800 50px Segoe UI, sans-serif";
+          ctx.fillStyle = "#F2C14E";
+          ctx.fillText("🏮 ĐẢO ĐÈN LỒNG — v1.0.0", 640, 315);
+          ctx.font = "700 24px Segoe UI, sans-serif";
+          ctx.fillStyle = "#FFE9B0";
+          ctx.fillText("AI SDLC Day 12 · Contract v1.3 · Giữ Đảo Sáng Tới Bình Minh", 640, 368);
+          ctx.font = "600 19px Segoe UI, sans-serif";
+          ctx.fillStyle = "#C9B48A";
+          ctx.fillText("3D Game (Three.js) · Deterministic 60 TPS Core · Headless · Soak · Benchmark", 640, 415);
+          ctx.textAlign = "left";
+        } else if (t < 17.0) {
+          if (currentSceneTag !== "s2a") { currentSceneTag = "s2a"; setupNight1Scene(false); }
+          const st = t - 5.0; // 0..12s
+          const mz = Math.min(23.5, st * 2.15);
+          const jumpY = (st > 2.2 && st < 3.0) ? Math.sin(((st - 2.2) / 0.8) * Math.PI) * 1.6 : 0;
+          may.root.position.set(0, jumpY, mz);
+          may.root.rotation.y = 0;
+          may.legL.rotation.x = Math.sin(st * 12) * 0.6;
+          may.legR.rotation.x = -Math.sin(st * 12) * 0.6;
+
+          const pickedCount = st < 2.8 ? 0 : (st < 5.0 ? 2 : (st < 7.2 ? 5 : (st < 9.0 ? 10 : 0)));
+          sceneObjects.motes.forEach((m, idx) => {
+            m.visible = mz < m.position.z - 0.5;
+            m.position.y = 0.9 + Math.sin(st * 4 + idx) * 0.2;
+          });
+          may.sparks.forEach((sp, i) => {
+            sp.visible = i < pickedCount;
+            if (sp.visible) {
+              const a = st * 2.5 + (i / Math.max(1, pickedCount)) * Math.PI * 2;
+              sp.position.set(Math.cos(a) * 0.95, 1.05, Math.sin(a) * 0.95);
+            }
+          });
+
+          const l0 = sceneObjects.lanterns[0];
+          const litNow = st >= 9.0;
+          l0.core.scale.y = litNow ? 1.0 : 0.8;
+          l0.coreMat.color.setHex(litNow ? COLORS.lanternCore : COLORS.lanternUnlit);
+          l0.coreMat.emissiveIntensity = litNow ? 2.5 : 0.1;
+          l0.pLight.intensity = litNow ? 3.8 : 0;
+          l0.safeRing.material.opacity = litNow ? 0.38 : 0;
+          l0.fbGroup.visible = litNow;
+          ambient.intensity = litNow ? 0.42 : 0.25;
+
+          const sh = sceneObjects.shade;
+          const pulsed = st >= 10.2;
+          if (pulsed) {
+            const pAge = Math.min(1, (st - 10.2) / 0.6);
+            sceneObjects.pulseRing.visible = pAge < 0.95;
+            sceneObjects.pulseRing.position.set(0, 0.2, mz);
+            sceneObjects.pulseRing.scale.setScalar(1 + pAge * 6.5);
+            sh.g.position.set(6, 0, 19 + Math.min(4, (st - 10.2) * 6));
+            sh.bodyMat.color.setHex(COLORS.shadeStunned);
+            sh.bodyMat.emissive.setHex(COLORS.lanternLit);
+            sh.stars.visible = true;
+            sh.stars.rotation.y = st * 5;
+          } else {
+            sh.g.position.set(6 - st * 0.3, 0, 19);
+            sh.stars.visible = false;
+          }
+
+          camera.position.set(6.5, 7.2, mz - 11.5);
+          camera.lookAt(0, 1.4, mz + 1.5);
+          renderer.render(scene, camera);
+          ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+          drawGameHUD({
+            nightLabel: "Đêm 1 · Đảo Bến",
+            flames: 3,
+            clock: `03:${String(59 - Math.floor(st)).padStart(2, "0")}`,
+            lanterns: litNow ? "2/5 (≥3)" : "1/5 (≥3)",
+            score: litNow ? (pulsed ? 155 : 150) : 0,
+            carried: litNow ? (pulsed ? 0 : 3) : Math.max(2, pickedCount),
+            cap: litNow ? 12 : 10,
+            subtitle: pulsed ? "✨ Tỏa Sáng làm choáng Bóng Mực (+5 điểm)" : "👁️ Bóng Mực vừa xuất hiện!",
+            prompt: (st > 8.0 && st < 9.0) ? "E — Nạp ánh sáng (0/10)" : "",
+          });
+        } else if (t < 23.0) {
+          if (currentSceneTag !== "s2b") { currentSceneTag = "s2b"; setupNight2Scene(); }
+          const st = t - 17.0; // 0..6s: jump pad arc from (20,0,18) to (70,0,0)
+          const p = Math.min(1, st / 3.8);
+          const mx = 20 + p * 50;
+          const mz = 18 * (1 - p);
+          const my = Math.sin(p * Math.PI) * 7.5;
+          may.root.position.set(mx, my, mz);
+          may.root.rotation.y = Math.atan2(50, -18);
+          sceneObjects.charm.rotation.y = st * 2.5;
+          sceneObjects.drifter.position.y = 2.2 + Math.sin(st * 4) * 0.35;
+          camera.position.set(mx - 10, my + 8.5, mz + 13);
+          camera.lookAt(mx, my + 1, mz);
+          renderer.render(scene, camera);
+          ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+          drawGameHUD({
+            nightLabel: "Đêm 2 · Đảo Cau",
+            flames: 3,
+            clock: "04:12",
+            lanterns: "2/6 (≥4)",
+            score: 340,
+            carried: 6,
+            cap: 14,
+            subtitle: "💨 Bục nhảy & Cầu tre — Bùa Gió + Gió Lạc (#8FA3B8)",
+          });
+        } else if (t < 28.0) {
+          if (currentSceneTag !== "s2c") { currentSceneTag = "s2c"; setupNight3Scene(); }
+          const st = t - 23.0;
+          const cbOn = st >= 2.2;
+          const accent = cbOn ? COLORS.shadeRimCB : COLORS.shadeRim;
+          sceneObjects.shade.ringMat.color.setHex(accent);
+          sceneObjects.shade.eyeMat.color.setHex(accent);
+          sceneObjects.shade.bodyMat.emissive.setHex(accent);
+          sceneObjects.beamMat.color.setHex(accent);
+          const blink = Math.sin(st * Math.PI * 2) > 0;
+          sceneObjects.l2.coreMat.emissiveIntensity = blink ? 2.1 : 0.45;
+          sceneObjects.l2.fbFillMat.color.setHex(cbOn ? 0xFFFFFF : 0xFF5A5F);
+          may.root.position.set(12, 3, 12);
+          camera.position.set(24, 11, 23);
+          camera.lookAt(16, 4, 10);
+          renderer.render(scene, camera);
+          ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+          drawGameHUD({
+            nightLabel: "Đêm 3 · Đảo Chuông",
+            flames: 3,
+            clock: "02:18",
+            lanterns: "2/7 (≥5)",
+            score: 520,
+            carried: 8,
+            cap: 14,
+            cb: cbOn,
+            subtitle: cbOn
+              ? "⚠ CHẾ ĐỘ MÙ MÀU: Bóng Mực #00B3FF · Cảnh báo #FFFFFF"
+              : "⚠ Bóng Mực đang hút dầu L2 (<30%)!",
+          });
+        } else if (t < 40.0) {
+          if (currentSceneTag !== "s3") { currentSceneTag = "s3"; setupNight1Scene(true); }
+          const st = t - 28.0;
+          const theta = (2 * Math.PI * st) / 15.0;
+          camera.position.set(30.0 * Math.cos(theta), 15.0, -30.0 * Math.sin(theta));
+          camera.lookAt(0, 0, 0);
+
+          const { dummy, shadeInst, shades, moteInst, motes, lanterns } = sceneObjects;
+          for (let i = 0; i < shades.length; i++) {
+            const s = shades[i];
+            s.ang += 0.4 * 0.033;
+            const nx = s.x + Math.cos(s.ang) * 0.06, nz = s.z + Math.sin(s.ang) * 0.06;
+            if (Math.hypot(nx, nz) < 39) { s.x = nx; s.z = nz; } else s.ang += 2.3;
+            for (let j = 0; j < 3; j++) {
+              const l = lanterns[j];
+              const dx = s.x - l.pos[0], dz = s.z - l.pos[2], d = Math.hypot(dx, dz);
+              if (d < 6.0) { s.x = l.pos[0] + (dx / Math.max(0.01, d)) * 6.0; s.z = l.pos[2] + (dz / Math.max(0.01, d)) * 6.0; }
+            }
+            dummy.position.set(s.x, 0.9, s.z);
+            dummy.rotation.set(0, s.ang, 0);
+            dummy.updateMatrix();
+            shadeInst.setMatrixAt(i, dummy.matrix);
+          }
+          shadeInst.instanceMatrix.needsUpdate = true;
+          for (let i = 0; i < motes.length; i++) {
+            const m = motes[i];
+            dummy.position.set(m.x, 0.9 + Math.sin(st * 3 + m.phase) * 0.22, m.z);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            moteInst.setMatrixAt(i, dummy.matrix);
+          }
+          moteInst.instanceMatrix.needsUpdate = true;
+
+          renderer.render(scene, camera);
+          ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+          const b = demoData.bench || {};
+          drawRoundRect(28, 22, 560, 275, 16, "rgba(14,20,48,0.88)", "#F2C14E");
+          ctx.font = "800 22px Segoe UI, sans-serif";
+          ctx.fillStyle = "#F2C14E";
+          ctx.fillText("BENCHMARK 1280×720 (?bench=1) — Số đo thật", 48, 56);
+          ctx.font = "600 18px Consolas, monospace";
+          ctx.fillStyle = "#F5F1E6";
+          ctx.fillText(`Scene: 200 Shades + 100 Fireflies + L1-L3 Lit`, 48, 92);
+          ctx.fillStyle = "#7EF7B4";
+          ctx.fillText(`avg_fps      : ${b.avg_fps}  (ngưỡng ≥ 60)`, 48, 124);
+          ctx.fillText(`p1_low_fps   : ${b.p1_low_fps}  (ngưỡng ≥ 30)`, 48, 152);
+          ctx.fillText(`load_ms      : ${b.load_ms} ms (ngưỡng ≤ 10000)`, 48, 180);
+          ctx.fillStyle = "#FFE9B0";
+          ctx.fillText(`frame_ms_p95 : ${b.frame_ms_p95} ms · frames: ${b.frames}`, 48, 208);
+          ctx.fillText(`peak_mem_mb  : ${b.peak_mem_mb} MB · vsync_off: ${b.vsync_off}`, 48, 236);
+          ctx.font = "600 15px Consolas, monospace";
+          ctx.fillStyle = "#C9B48A";
+          ctx.fillText(`${String(b.renderer || "").slice(0, 56)}`, 48, 266);
+          ctx.fillText(`OS: ${b.os || ""}`, 48, 286);
+        } else if (t < 55.0) {
+          if (t < 46.5) {
+            const p = (t - 40.0) / 6.5;
+            const lines = demoData.test_lines || [];
+            const maxScroll = Math.max(0, lines.length * 26 - 540);
+            drawTerminalLines("1/3 · KIỂM CHỨNG TỰ ĐỘNG (python -m unittest discover -s tests -v)", lines, p * maxScroll, "#7EF7B4");
+          } else if (t < 51.0) {
+            drawTerminalLines("2/3 · HEADLESS CONTRACT v1.3 (src/headless.py)", demoData.headless_lines || [], 0, "#FFB347");
+          } else {
+            drawTerminalLines("3/3 · SOAK TEST 10 ĐÊM LIÊN TIẾP (src/soak.py -> soak.json)", demoData.soak_lines || [], 0, "#F2C14E");
+          }
+        } else {
+          // Scene 5 (55..68s): AI Harness + Git History + Release v1.0.0
+          ctx.fillStyle = "#0E1430";
+          ctx.fillRect(0, 0, W, H);
+          drawRoundRect(30, 24, 600, 672, 16, "#101736", "#F2C14E");
+          drawRoundRect(650, 24, 600, 672, 16, "#101736", "#7EF7B4");
+
+          ctx.font = "800 22px Segoe UI, sans-serif";
+          ctx.fillStyle = "#F2C14E";
+          ctx.fillText("AI HARNESS (AGENTS.md & verify-phase)", 50, 62);
+          ctx.font = "600 16px Consolas, monospace";
+          (demoData.harness_lines || []).slice(0, 22).forEach((ln, i) => {
+            ctx.fillStyle = ln.startsWith("#") ? "#FFB347" : "#F5F1E6";
+            ctx.fillText(ln.slice(0, 56), 50, 98 + i * 26);
+          });
+
+          ctx.font = "800 22px Segoe UI, sans-serif";
+          ctx.fillStyle = "#7EF7B4";
+          ctx.fillText("GIT TAGS, LOG & RELEASE v1.0.0", 670, 62);
+          ctx.font = "600 16px Consolas, monospace";
+          (demoData.git_lines || []).slice(0, 22).forEach((ln, i) => {
+            ctx.fillStyle = ln.startsWith("phase-") || ln.startsWith("===") ? "#FFE9B0" : "#F5F1E6";
+            ctx.fillText(ln.slice(0, 56), 670, 98 + i * 26);
+          });
+        }
+
+        if (t < TOTAL_DURATION_S) {
+          setTimeout(() => requestAnimationFrame(renderFrame), 28);
+        } else {
+          recorder.stop();
+        }
+      }
+
+      requestAnimationFrame(renderFrame);
+      await stoppedPromise;
+
+      const blob = new Blob(chunks, { type: mimeType });
+      try {
+        const upRes = await fetch("/api/demo-video", {
+          method: "POST",
+          headers: { "Content-Type": "video/mp4" },
+          body: blob,
+        });
+        if (!upRes.ok) throw new Error(`Upload HTTP ${upRes.status}`);
+      } catch (err) {
+        await reportError(`Upload failed: ${err}`);
+      }
+    }
+
+    main().catch((e) => reportError(e.stack || String(e)));
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ name: CI Verification
 on:
   push:
     branches: ["main", "master"]
-    tags: ["phase-*"]
+    tags: ["phase-*", "v*"]
   pull_request:
 
 jobs:
@@ -15,11 +15,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile check
-        run: python3 -m compileall -q src
-      - name: Run unit & contract tests
+        run: python3 -m compileall -q src scripts
+      - name: Run full unit, contract, regression & Phase 4 tests
         run: python3 -m unittest discover -s tests -v
-      - name: Headless determinism check
+      - name: Headless determinism check (Night 3)
         run: |
-          python3 src/headless.py --seed 42 --night 1 --ticks 600 --out /tmp/run1.jsonl
-          python3 src/headless.py --seed 42 --night 1 --ticks 600 --out /tmp/run2.jsonl
+          python3 src/headless.py --seed 42 --night 3 --ticks 600 --out /tmp/run1.jsonl
+          python3 src/headless.py --seed 42 --night 3 --ticks 600 --out /tmp/run2.jsonl
           diff -u /tmp/run1.jsonl /tmp/run2.jsonl
+      - name: Soak test stability check (10 nights)
+        run: python3 src/soak.py --seed 7 --nights 10 --out /tmp/soak_ci.json

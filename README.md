@@ -1,80 +1,93 @@
-# 🏮 Đảo Đèn Lồng — Đèn Cạn Dầu (Contract v1.2)
+# 🏮 Đảo Đèn Lồng — v1.0.0 (Contract v1.3)
 
-> **Video demo:** *(Sẽ cập nhật ở Phase 4 / Release `v1.0.0`)*
+> **Video demo (< 5 phút):** [Xem video demo trực tiếp (`docs/demo/demo.mp4`)](docs/demo/demo.mp4) *(cũng đính kèm trong GitHub Release `v1.0.0`)*
 
-Game 3D góc nhìn thứ ba qua **3 Đêm**: **Đêm 1 — Đảo Bến (240s)**, **Đêm 2 — Đảo Cau (270s)**, **Đêm 3 — Đảo Chuông (300s)**. Điều khiển **Mây** (đội nón lá treo đèn lồng nhỏ) thắp sáng, châm dầu và bảo vệ các Đèn Lồng Lớn khỏi Bóng Mực hút dầu để **giữ đảo sáng tới bình minh**!
+![Đảo Đèn Lồng Preview](docs/demo/preview.svg)
+
+Game 3D góc nhìn thứ ba qua **3 Đêm**: **Đêm 1 — Đảo Bến (240 s)**, **Đêm 2 — Đảo Cau (270 s)** và **Đêm 3 — Đảo Chuông (300 s)**. Điều khiển **Mây** (đội nón lá treo đèn lồng nhỏ) gom đom đóm để thắp sáng, châm dầu và bảo vệ các Đèn Lồng Lớn khỏi Bóng Mực hút dầu và Gió Lạc — **giữ đảo sáng tới bình minh**!
+
+---
+
+## Yêu cầu hệ thống
+- **Python 3.10+** (0 thư viện ngoài — chỉ dùng Python Standard Library).
+- Trình duyệt hiện đại hỗ trợ WebGL (Chrome / Chromium / Edge / Firefox / Safari) cho bản 3D và chế độ Benchmark.
+- Hệ điều hành: **macOS, Linux hoặc Windows** (kèm `Dockerfile` tùy chọn).
 
 ---
 
 ## Cài đặt & Chạy game (tối đa 3 lệnh)
 
-Yêu cầu: **Python 3.10+** (0 thư viện ngoài) và trình duyệt hỗ trợ WebGL.
-
 ```bash
 # 1. Kiểm tra biên dịch
 python3 -m compileall -q src
 
-# 2. Mở game 3D trên trình duyệt (tự mở http://127.0.0.1:8000/web/)
+# 2. Khởi chạy game 3D (tự mở http://127.0.0.1:8000/web/)
 python3 src/play.py
 ```
 
----
-
-## Điều khiển
-
-| Phím / Thao tác | Chức năng |
-|---|---|
-| `W A S D` / Phím mũi tên | Di chuyển Mây (`6.0 m/s`, với Bùa Gió `7.2 m/s`) |
-| `Space` | Nhảy (`7.0 m/s`) |
-| `Shift` | Lướt (`14 m/s`, `0.2 s`, hồi chiêu `1.5 s`, `0 s` khi có Bùa Gió) |
-| `E` | Thắp đèn (lần đầu `10`, thắp lại `5`) hoặc **Châm dầu** cho đèn đang sáng (`+10 dầu/đom đóm`) |
-| `F` hoặc `X` | Tỏa Sáng xua & làm choáng Bóng Mực / Gió Lạc (tốn `3` đom đóm, hồi chiêu `3.0 s`) |
-| `Q` / `C` hoặc kéo chuột | Xoay camera 3D |
-| `Esc` / `P` | Tạm dừng (Tiếp tục / Chơi lại Đêm / Cài đặt âm thanh, chuột & **Chế độ mù màu** / Về menu) |
+*(Hoặc chạy qua Docker: `docker build -t dao-den-long . && docker run -p 8000:8000 dao-den-long`, sau đó mở `http://127.0.0.1:8000/web/`.)*
 
 ---
 
-## Luật chơi & Cách tính điểm (Contract v1.2)
+## Điều khiển (hỗ trợ đổi phím trong Cài đặt)
 
-Toàn bộ thông số khai báo tại [game.contract.json](game.contract.json):
-- **Giữ đảo sáng tới bình minh:** Thắng khi hết giờ còn sống và giữ sáng `≥ 60%` tổng số đèn (Đêm 1: `3/5`, Đêm 2: `4/6`, Đêm 3: `5/7`). Không thắng sớm khi thắp đủ đèn.
-- **Nhiên liệu đèn:** Đèn sáng bắt đầu ở `100` dầu, tự hao `1/s`; dưới `30` dầu sẽ mất vùng an toàn `6 m` và bị Bóng Mực hút thêm `5/s` (`drain`). Hết dầu đèn tắt (`ever_lit = true`), thắp lại chỉ tốn `5` đom đóm.
-- **Sức chứa tăng dần:** `10 + 2 × số lần thắp thành công trong Đêm` (tối đa `20`).
-- **Điểm số:**
-  - Nạp 1 đom đóm (thắp mới / thắp lại / châm dầu): **+5**
-  - Thắp lần đầu: **+100** · Thắp lại: **+40**
-  - Bóng Mực trúng Tỏa Sáng: **+5** (hoặc **+15** nếu đang `drain`)
-  - Thưởng bình minh (khi thắng): mỗi đèn sáng **+50 + `floor(fuel)`**; mỗi Ngọn Lửa còn lại **+50** (không còn thưởng thời gian).
+| Hành động | Phím mặc định | Ghi chú |
+|---|---|---|
+| Di chuyển | `W A S D` / Phím mũi tên | `6.0 m/s` (`7.2 m/s` khi có Bùa Gió) |
+| Nhảy | `Space` | Vận tốc `7.0 m/s` |
+| Lướt | `Shift` | `14 m/s`, `0.2 s`, hồi chiêu `1.5 s` (`0 s` khi có Bùa Gió) |
+| Thắp / Thắp lại / Châm dầu | `E` | Lần đầu `10`, thắp lại `5`, châm dầu `+10/đom đóm` |
+| Tỏa Sáng | `F` | Tốn `3` đom đóm, bán kính `5 m` 3D, hồi chiêu `3.0 s` |
+| Xoay camera 3D | `Q` / `C` hoặc kéo chuột | Tùy chỉnh độ nhạy chuột trong Cài đặt |
+| Tạm dừng | `Esc` / `P` | Tiếp tục, Chơi lại Đêm, Cài đặt (Mù màu, Giảm chuyển động, Chữ lớn ×1.25, Đổi phím), Về menu |
 
 ---
 
-## Chạy Test & Chế độ Headless (Test Contract v1.2)
+## Luật chơi & Cách tính điểm (Contract v1.3)
+
+Toàn bộ hằng số khai báo tại [game.contract.json](game.contract.json):
+- **Giữ đảo sáng tới bình minh:** Thắng khi hết giờ còn sống và giữ sáng `≥ 60%` tổng số đèn (Đêm 1: `3/5`, Đêm 2: `4/6`, Đêm 3: `5/7`). Không thắng sớm.
+- **Nhiên liệu đèn:** Tối đa `100`, tự hao `1/s` (tính nguyên `1/60` mỗi tick); `< 30` mất vùng an toàn `6 m` và bị Bóng Mực `drain` thêm `5/s`. Hết dầu đèn tắt (`ever_lit = true`), thắp lại chỉ tốn `5` đom đóm.
+- **Sức chứa tăng dần:** `min(20, 10 + 2 × số lần thắp thành công trong Đêm)`.
+- **Điểm số:** Nạp 1 đom đóm **+5** · Thắp lần đầu **+100** · Thắp lại **+40** · Tỏa Sáng trúng Bóng Mực **+5** (**+15** nếu đang `drain`) · Bình minh (khi thắng): **+50 + `floor(fuel)`** mỗi đèn sáng và **+50** mỗi Ngọn Lửa còn lại.
+
+---
+
+## Kiểm thử, Headless, Benchmark, Soak & Bảng xếp hạng
 
 ```bash
-# Chạy toàn bộ test (hồi quy Phase 1–2 + kiểm chứng toàn diện Ticket-03 + hiệu năng + determinism)
+# 1. Chạy toàn bộ bộ test tự động (Phase 1-4: hồi quy, Contract v1.3, leaderboard, soak)
 python3 -m unittest discover -s tests -v
 
-# Chạy chế độ headless cho Đêm 1, 2 hoặc 3
+# 2. Chế độ Headless (Contract v1.3, 60 tick/s cố định, --night 1|2|3)
 python3 src/headless.py --seed 42 --night 1 --ticks 600 --out /tmp/out.jsonl --snapshot-every 10
-python3 src/headless.py --seed 99 --night 3 --ticks 18000 --out /tmp/night3.jsonl --snapshot-every 600
+
+# 3. Chế độ Benchmark 3D chuẩn (1280x720, 200 Bóng Mực, 100 đom đóm, L1-L3 sáng, 3s warmup + 30s đo)
+python3 src/bench.py --seed 42 --duration 30 --out bench.json
+
+# 4. Soak test 10 Đêm liên tiếp (kiểm tra ổn định & rò rỉ bộ nhớ RSS)
+python3 src/soak.py --seed 7 --nights 10 --out soak.json
+
+# 5. Xuất Bảng xếp hạng cục bộ Top 10
+python3 src/play.py --export-leaderboard out.json
 ```
+
+> **Lưu ý về Benchmark (`vsync_off` & `peak_mem_mb`):** `src/bench.py` khởi chạy trình duyệt Chromium/Chrome/Edge với cờ `--disable-gpu-vsync --disable-frame-rate-limit` ở kích thước cửa sổ `1280×720` (không toàn màn hình). Trong trường hợp trình quản lý cửa sổ hệ điều hành vẫn khóa tần số quét (ví dụ macOS compositor) hoặc không đọc được RSS tiến trình con, kết quả được ghi trung thực trong `bench.json`.
 
 ---
 
 ## Sáng tạo của tôi
 
-Các yếu tố sáng tạo được cô lập hoàn toàn ở lớp hiển thị/âm thanh trình duyệt (`web/`), **giữ đúng bảng màu chuẩn Hex, hỗ trợ chế độ mù màu và không làm đổi đầu ra headless Contract v1.2**:
-1. **Thiết kế nhân vật & hiệu ứng cổ tích:** Nhân vật Mây cử động tay chân theo nhịp chạy, khăn quàng đỏ bay, nón lá treo đèn lồng đung đưa, đom đóm đã nhặt bay xoay quanh người (tới 20 đốm), bóng mờ + FOV khi Lướt, tia năng lượng hút dầu của Bóng Mực, thanh dầu 3D trên đèn và đèn tắt xẹp 20% kèm vết rách giấy.
-2. **UI & Hỗ trợ tiếp cận:** Minimap radar theo dõi đèn yếu/đèn tắt/kẻ địch, chế độ **Bảng màu dễ phân biệt (Mù màu)** (`#00B3FF` & `#FFFFFF + ⚠`), thanh đom đóm co giãn động theo sức chứa `10..20`, bộ đếm FPS trực tiếp và mũi tên chỉ ưu tiên đèn sắp cạn dầu ngoài màn hình.
-3. **Âm thanh tổng hợp Web Audio API:** Nhạc nền đêm dịu nhẹ cùng hiệu ứng đầy đủ cho nhặt, thắp đèn, châm dầu, tắt đèn, tỏa sáng, lướt, nhảy, bị đánh, cảnh báo gió mạnh và đếm ngược 10 giây cuối.
-
-Bằng chứng kiểm chứng & hồi quy: [docs/proof/phase-3/README.md](docs/proof/phase-3/README.md).
+Mọi yếu tố sáng tạo được cô lập ở lớp hiển thị/âm thanh trình duyệt (`web/`), **tự động tắt phần trang trí thừa trong cảnh Benchmark và không làm đổi bất kỳ đầu ra headless nào theo Test Contract v1.3**:
+1. **Nhân vật Mây & Đồ họa cổ tích:** Cử động tay chân theo nhịp chạy, khăn đỏ bay, nón lá treo đèn lồng mini đung đưa, đom đóm đã nhặt bay xoay quanh người (tới 20 đốm), đèn tắt xẹp 20% kèm vết rách giấy, thanh dầu 3D nhấp nháy 1 Hz `< 30`, tia hút dầu của Bóng Mực, cây cau & Tháp Chuông mái đỏ.
+2. **UI & Khả năng tiếp cận toàn diện:** Minimap radar thời gian thực, Bảng xếp hạng Top 10 lưu đĩa cục bộ (hỗ trợ tên tiếng Việt), đổi 9 phím có báo trùng, phụ đề hình ảnh + mũi tên chỉ hướng Bóng Mực xuất hiện, chế độ mù màu (`#00B3FF` & `#FFFFFF + ⚠`), giảm chuyển động và chữ lớn `×1.25` (nền tối thiểu `18px`).
+3. **Âm thanh tổng hợp Web Audio API:** Nhạc nền đêm dịu nhẹ và đầy đủ hiệu ứng âm thanh tổng hợp (0 file ngoài).
 
 ---
 
-## Tài liệu & Ghi chép SDLC
-- Harness AI: [AGENTS.md](AGENTS.md), [.agents/skills/verify-phase/SKILL.md](.agents/skills/verify-phase/SKILL.md), [.github/workflows/ci.yml](.github/workflows/ci.yml)
-- ADR & Changelog: [docs/notes/adr-001-lantern-fuel-and-dawn-survival.md](docs/notes/adr-001-lantern-fuel-and-dawn-survival.md), [CHANGELOG.md](CHANGELOG.md)
-- Spec & Ghi chép: [docs/notes/phase-1.md](docs/notes/phase-1.md), [docs/notes/phase-2.md](docs/notes/phase-2.md), [docs/notes/phase-3.md](docs/notes/phase-3.md), [docs/notes/ai-log.md](docs/notes/ai-log.md)
-- Bằng chứng: [docs/proof/phase-1/README.md](docs/proof/phase-1/README.md), [docs/proof/phase-2/README.md](docs/proof/phase-2/README.md), [docs/proof/phase-3/README.md](docs/proof/phase-3/README.md)
-- Bản quyền & Nguồn asset: [LICENSE](LICENSE), [CREDITS.md](CREDITS.md)
+## Tài liệu SDLC, Bằng chứng & Bản quyền
+- **Harness AI:** [AGENTS.md](AGENTS.md), [.agents/skills/verify-phase/SKILL.md](.agents/skills/verify-phase/SKILL.md), [.github/workflows/ci.yml](.github/workflows/ci.yml)
+- **Kiến trúc & Lịch sử thay đổi:** [ADR-001](docs/notes/adr-001-lantern-fuel-and-dawn-survival.md), [CHANGELOG.md](CHANGELOG.md)
+- **Ghi chép & Retro:** [phase-1.md](docs/notes/phase-1.md), [phase-2.md](docs/notes/phase-2.md), [phase-3.md](docs/notes/phase-3.md), [ai-log.md](docs/notes/ai-log.md), [retro.md](docs/notes/retro.md)
+- **Bằng chứng kiểm chứng:** [phase-1](docs/proof/phase-1/README.md), [phase-2](docs/proof/phase-2/README.md), [phase-3](docs/proof/phase-3/README.md), [phase-4](docs/proof/phase-4/README.md), [soak.json](soak.json), [bench.json](bench.json)
+- **Bản quyền & Nguồn:** [LICENSE](LICENSE), [CREDITS.md](CREDITS.md)

@@ -26,7 +26,9 @@ class TestPhase1And2RegressionV12(unittest.TestCase):
         self.tuning = self.contract["tuning"]
 
     def test_contract_v1_2_schema(self) -> None:
-        self.assertEqual(self.contract["contract_version"], "1.2")
+        self.assertEqual(self.contract["contract_version"], "1.3")
+        for key in ("bench_cmd", "soak_cmd"):
+            self.assertIn(key, self.contract)
         for key in (
             "fuel_max", "fuel_decay_per_s", "fuel_per_mote", "relight_cost",
             "win_ratio", "drain_per_s", "low_fuel_threshold", "capacity_max",
@@ -400,6 +402,67 @@ class TestHeadlessScenariosV12(unittest.TestCase):
             self.assertEqual(r2.returncode, 0, r2.stderr)
             self.assertLessEqual(elapsed, 30.0)
             self.assertEqual(out1.read_text(encoding="utf-8"), out2.read_text(encoding="utf-8"))
+
+
+class TestPhase4ReleaseAndNonFunctional(unittest.TestCase):
+    """Tests for Ticket-04: Leaderboard, CLI export, and Soak test stability."""
+
+    def test_leaderboard_validation_sorting_tiebreak_and_top10(self) -> None:
+        from src.core.leaderboard import add_leaderboard_entry, load_leaderboard, validate_player_name
+
+        # Validation: 3-12 chars [A-Za-z0-9_] + Vietnamese accented bonus
+        self.assertEqual(validate_player_name("May_01"), "May_01")
+        self.assertEqual(validate_player_name("MâyĐèn"), "MâyĐèn")
+        with self.assertRaises(ValueError):
+            validate_player_name("ab")  # too short
+        with self.assertRaises(ValueError):
+            validate_player_name("abcdefghijklm")  # > 12 chars
+        with self.assertRaises(ValueError):
+            validate_player_name("bad name!")  # space / symbol
+
+        with tempfile.TemporaryDirectory() as td:
+            lb_path = Path(td) / "lb.json"
+            # Add 12 entries including a tie on score 500
+            add_leaderboard_entry("PlayerLate", 500, 2, 1, "2026-11-20T12:00:00+07:00", lb_path)
+            add_leaderboard_entry("PlayerEarly", 500, 2, 2, "2026-11-20T11:00:00+07:00", lb_path)
+            for i in range(10):
+                add_leaderboard_entry(f"Runner_{i}", 100 + i * 30, 1, 10 + i, f"2026-11-20T10:0{i}:00+07:00", lb_path)
+
+            loaded = load_leaderboard(lb_path)
+            self.assertEqual(len(loaded), 10)
+            self.assertEqual(loaded[0]["name"], "PlayerEarly")  # earlier timestamp wins tie
+            self.assertEqual(loaded[1]["name"], "PlayerLate")
+            self.assertEqual(loaded[0]["score"], 500)
+
+    def test_play_export_leaderboard_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "exported.json"
+            r = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "src" / "play.py"), "--export-leaderboard", str(out)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertIn("entries", data)
+            self.assertIsInstance(data["entries"], list)
+
+    def test_soak_cli_short_run(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "soak_test.json"
+            r = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "src" / "soak.py"), "--seed", "7", "--nights", "3", "--out", str(out)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["nights"], 3)
+            self.assertEqual(data["crashes"], 0)
+            self.assertEqual(len(data["results"]), 3)
+            self.assertLessEqual(data["mem_end_mb"], data["mem_start_mb"] * 1.2)
 
 
 if __name__ == "__main__":
