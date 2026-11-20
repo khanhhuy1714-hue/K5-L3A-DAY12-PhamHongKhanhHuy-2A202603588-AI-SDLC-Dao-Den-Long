@@ -71,7 +71,7 @@ def _build_night1() -> NightMap:
     return NightMap(
         night=1,
         name="Đảo Bến",
-        duration_s=300.0,
+        duration_s=240.0,
         spawn_pos=(0.0, 0.0, 0.0),
         lanterns=lanterns,
         mote_points=motes,
@@ -118,7 +118,7 @@ def _build_night2() -> NightMap:
     return NightMap(
         night=2,
         name="Đảo Cau",
-        duration_s=330.0,
+        duration_s=270.0,
         spawn_pos=(0.0, 0.0, 0.0),
         lanterns=lanterns,
         mote_points=motes,
@@ -159,7 +159,7 @@ def _build_night3() -> NightMap:
     return NightMap(
         night=3,
         name="Đảo Chuông",
-        duration_s=360.0,
+        duration_s=300.0,
         spawn_pos=(0.0, 0.0, 32.0),
         lanterns=lanterns,
         mote_points=motes,

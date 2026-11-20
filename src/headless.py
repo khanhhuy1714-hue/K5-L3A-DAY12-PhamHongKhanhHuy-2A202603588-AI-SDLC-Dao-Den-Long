@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless CLI runner for Đảo Đèn Lồng (Test Contract v1.1).
+"""Headless CLI runner for Đảo Đèn Lồng (Test Contract v1.2).
 
 Usage:
   python3 src/headless.py --seed <int> --night <1|2|3> [--scenario <file.json>]
