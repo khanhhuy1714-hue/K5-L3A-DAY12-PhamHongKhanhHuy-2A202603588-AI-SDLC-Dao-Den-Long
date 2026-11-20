@@ -1,0 +1,25 @@
+name: CI Verification
+
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["phase-*"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile check
+        run: python3 -m compileall -q src
+      - name: Run unit & contract tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Headless determinism check
+        run: |
+          python3 src/headless.py --seed 42 --night 1 --ticks 600 --out /tmp/run1.jsonl
+          python3 src/headless.py --seed 42 --night 1 --ticks 600 --out /tmp/run2.jsonl
+          diff -u /tmp/run1.jsonl /tmp/run2.jsonl
